@@ -1,7 +1,7 @@
 # Spec: `run_agent()`
 
 **File:** `agent.py`
-**Status:** Spec incomplete — fill in all blank fields before implementing
+**Status:** Partially pre-filled — complete the two blank fields before implementing
 
 ---
 
@@ -30,63 +30,96 @@ The agent's final text response for this turn. Should never be empty — if some
 
 ## Design Decisions
 
-*Complete all fields below before writing any code. Read `specs/system-design.md` (especially the "How the Groq Tool Calling API Works" section) before filling these in. Use Plan or Ask mode to work through the parts that are unclear.*
+*Read `specs/system-design.md` (especially the "How the Groq Tool Calling API Works" section) before reviewing these. Complete the two blank fields before writing any code.*
 
 ---
 
 ### Messages list structure
 
-*Describe the full structure of the messages list at the start of the function, before any LLM calls. What goes in it, in what order? Include the format of history messages.*
+The messages list must start with the system prompt, then replay the conversation
+history, then add the new user message. Gradio history is a list of `[user, assistant]`
+pairs — convert each pair to two API-format dicts:
 
-```
-[your answer here]
+```python
+messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+for user_msg, assistant_msg in history:
+    messages.append({"role": "user", "content": user_msg})
+    if assistant_msg:
+        messages.append({"role": "assistant", "content": assistant_msg})
+
+messages.append({"role": "user", "content": user_message})
 ```
 
 ---
 
 ### Initial LLM call
 
-*What arguments do you pass to `client.chat.completions.create()` for the first call? List the key parameters and their values.*
+Pass the model, the messages list, the tool definitions, and `tool_choice="auto"`
+so the LLM can decide whether to call a tool or respond directly:
 
-```
-[your answer here]
+```python
+response = client.chat.completions.create(
+    model=LLM_MODEL,
+    messages=messages,
+    tools=TOOL_DEFINITIONS,
+    tool_choice="auto",
+)
 ```
 
 ---
 
 ### Detecting tool calls in the response
 
-*How do you check whether the LLM's response contains tool calls? What field do you inspect?*
+The response object has a `choices` list. Index 0 gives the assistant message.
+Check its `tool_calls` attribute — if it's truthy, the LLM wants to call tools:
 
-```
-[your answer here]
+```python
+assistant_message = response.choices[0].message
+
+if not assistant_message.tool_calls:
+    # No tool calls — LLM has a final answer
+    ...
 ```
 
 ---
 
 ### Appending the assistant message
 
-*When there are tool calls, you must append the assistant message before appending tool results. What does that append look like? Why does order matter?*
+When there are tool calls, append the full assistant message object to `messages`
+**before** appending any tool results. The API requires this ordering — a tool
+result message must immediately follow the assistant message that requested it:
 
-```
-[your answer here]
+```python
+messages.append(assistant_message)  # must come first
 ```
 
 ---
 
 ### Executing and appending tool results
 
-*For each tool call: how do you get the tool name and arguments? How do you call dispatch_tool()? What does the tool result message look like?*
+For each tool call, extract the name and arguments, call `dispatch_tool()`, and
+append the result as a `"tool"` role message. The `tool_call_id` links this result
+back to the specific tool call that requested it:
 
-```
-[your answer here]
+```python
+for tool_call in assistant_message.tool_calls:
+    tool_name = tool_call.function.name
+    tool_args = json.loads(tool_call.function.arguments)
+    tool_result = dispatch_tool(tool_name, tool_args)
+
+    messages.append({
+        "role": "tool",
+        "tool_call_id": tool_call.id,
+        "content": tool_result,
+    })
 ```
 
 ---
 
 ### Loop termination conditions
 
-*The loop should stop when: (a) the LLM returns a response with no tool calls, OR (b) the MAX_TOOL_ROUNDS limit is reached. Describe how you'll detect each condition and what you return in each case.*
+*The loop should stop when: (a) the LLM returns a response with no tool calls, OR (b) the MAX_TOOL_ROUNDS limit is reached. Describe how you will detect each condition and what you will return in each case.*
 
 ```
 [your answer here]
@@ -96,7 +129,7 @@ The agent's final text response for this turn. Should never be empty — if some
 
 ### Extracting the final text response
 
-*Once the loop exits normally (no more tool calls), how do you extract the text content from the response object to return as a string?*
+*Once the loop exits because there are no more tool calls, how do you extract the text content from the response object? What field holds the string you should return?*
 
 ```
 [your answer here]

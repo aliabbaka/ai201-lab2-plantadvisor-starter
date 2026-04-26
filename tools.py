@@ -47,9 +47,10 @@ def lookup_plant(plant_name: str) -> dict:
       {"found": False, "name": <original input>, "message": <helpful string>}
 
     The message in the not-found case matters — the agent will use it to decide
-    what to tell the user. Think about what would actually be helpful.
+    what to tell the user. Your spec has a dedicated field for this — think about
+    what information would actually be helpful to the agent.
 
-    Before writing code, complete specs/tool-functions-spec.md.
+    Before writing code, complete the lookup_plant section of specs/tool-functions-spec.md.
     """
     return {
         "found": False,
@@ -62,18 +63,24 @@ def get_seasonal_conditions(season: str | None = None) -> dict:
     """
     Return current seasonal care context for houseplants.
 
-    TODO — Milestone 1 (complete after lookup_plant):
+    If season is provided and valid, returns that season's data.
+    If season is None (or invalid), auto-detects from the current calendar month.
 
-    If `season` is provided (one of: "spring", "summer", "fall", "winter"),
-    return the data for that season from _season_data.
-
-    If `season` is None, auto-detect the current season based on the current
-    calendar month. Use _MONTH_TO_SEASON for the mapping.
-
-    Return the full season dict from _season_data, with one added field:
-      "detected_season": True   — if season was auto-detected from the month
-      "detected_season": False  — if season was passed as an argument
-
-    Before writing code, complete specs/tool-functions-spec.md.
+    Pre-implemented — read through this and the spec before working on lookup_plant().
     """
-    return {}
+    VALID_SEASONS = {"spring", "summer", "fall", "winter"}
+
+    if season and season.lower() in VALID_SEASONS:
+        # Caller specified a valid season — use it directly
+        season_key = season.lower()
+        detected = False
+    else:
+        # Auto-detect from the current month using the _MONTH_TO_SEASON mapping
+        current_month = datetime.now().month
+        season_key = _MONTH_TO_SEASON[current_month]
+        detected = True
+
+    # Copy the season dict so we don't mutate the cached data
+    result = dict(_season_data[season_key])
+    result["detected_season"] = detected
+    return result
